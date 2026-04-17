@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <!-- Gradient Background -->
+  <defs>
+    <linearGradient id="bg" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#0F172A" />
+      <stop offset="100%" stop-color="#1E1B4B" />
+    </linearGradient>
+    <linearGradient id="primary" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#8B5CF6" />
+      <stop offset="100%" stop-color="#D946EF" />
+    </linearGradient>
+  </defs>
+  
+  <rect width="512" height="512" rx="128" fill="url(#bg)"/>
+  
+  <!-- Hotel Architecture Symbol -->
+  <path d="M128 384 V192 L256 128 L384 192 V384" fill="none" stroke="url(#primary)" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- Graph / Revenue Pattern inside -->
+  <path d="M192 384 V288" fill="none" stroke="#FDE047" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M256 384 V224" fill="none" stroke="#FDE047" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
+  <path d="M320 384 V304" fill="none" stroke="#FDE047" stroke-width="32" stroke-linecap="round" stroke-linejoin="round"/>
+  
+  <!-- F symbol overlay (for Fortiv) -->
+  <path d="M172 172 H340 M172 240 H280 M172 172 V340" fill="none" stroke="#F8FAFC" stroke-width="32" stroke-linecap="round" opacity="0"/>
+</svg>
