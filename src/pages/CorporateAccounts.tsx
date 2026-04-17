@@ -49,15 +49,7 @@ const CorporateAccounts = () => {
             if (!data || data.length === 0) throw new Error("No data");
             setAccounts(data as Account[]);
         } catch (err) {
-            console.warn("Falling back to mock corporate accounts data.", err);
-            const mockAccounts: Account[] = [
-                { id: "1", account_ref: "CORP-INF", company_name: "Infosys", contact_name: "Rahul Sharma", city: "Bangalore", monthly_room_nights: 150, rate_negotiated_inr: 8500, contract_expiry: "2026-12-31", account_status: "Active" },
-                { id: "2", account_ref: "CORP-TCS", company_name: "TCS", contact_name: "Priya Singh", city: "Mumbai", monthly_room_nights: 200, rate_negotiated_inr: 8200, contract_expiry: "2026-05-15", account_status: "Expiring Soon", last_contacted: "2026-04-10" },
-                { id: "3", account_ref: "CORP-WIP", company_name: "Wipro", contact_name: "Amit Patel", city: "Bangalore", monthly_room_nights: 120, rate_negotiated_inr: 8700, contract_expiry: "2026-05-10", account_status: "Expiring Soon" },
-                { id: "4", account_ref: "CORP-HCL", company_name: "HCL Tech", contact_name: "Neha Gupta", city: "Noida", monthly_room_nights: 90, rate_negotiated_inr: 8900, contract_expiry: "2027-03-31", account_status: "Active" },
-                { id: "5", account_ref: "CORP-ACC", company_name: "Accenture", contact_name: "Vikram Desai", city: "Pune", monthly_room_nights: 180, rate_negotiated_inr: 8600, contract_expiry: "2026-11-30", account_status: "Active", last_contacted: "2026-01-15" }
-            ];
-            setAccounts(mockAccounts);
+            console.error("Failed to fetch corporate accounts:", err);
         } finally {
             setLoading(false);
         }
@@ -279,6 +271,11 @@ const CorporateAccounts = () => {
                         )}
                     </tbody>
                 </table>
+            </div>
+
+            {/* Footer */}
+            <div className="mt-10 pt-6 border-t border-border text-center text-[11px] text-muted-foreground">
+                © 2026 Fortiv Solutions. All rights reserved.
             </div>
         </DashboardLayout>
     );

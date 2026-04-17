@@ -1,9 +1,12 @@
 import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Eye, EyeOff, ArrowRight, Building2, Tags, CalendarCheck, TrendingUp, Users, BellRing } from "lucide-react";
+import { supabase } from "@/integrations/supabase/client";
+import { useToast } from "@/hooks/use-toast";
 
 const SignIn = () => {
   const navigate = useNavigate();
+  const { toast } = useToast();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [showPassword, setShowPassword] = useState(false);
@@ -13,9 +16,38 @@ const SignIn = () => {
   const handleSignIn = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
-    await new Promise((r) => setTimeout(r, 1200));
-    setIsLoading(false);
-    navigate("/dashboard");
+    
+    try {
+      const { data, error } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+
+      if (error) {
+        toast({
+          title: "Sign in failed",
+          description: error.message,
+          variant: "destructive",
+        });
+        return;
+      }
+
+      if (data.session) {
+        toast({
+          title: "Success",
+          description: "Signed in successfully.",
+        });
+        navigate("/dashboard");
+      }
+    } catch (err: any) {
+      toast({
+        title: "An error occurred",
+        description: err.message || "Could not sign in.",
+        variant: "destructive",
+      });
+    } finally {
+        setIsLoading(false);
+    }
   };
 
   return (

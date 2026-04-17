@@ -100,39 +100,7 @@ const Bookings = () => {
         if (!data || data.length === 0) throw new Error("No data");
         setBookings(data as Booking[]);
       } catch (err) {
-        console.warn("Falling back to mock bookings data.", err);
-        const mockBookings: Booking[] = [];
-        const names = ["Aarav Patel", "Diya Sharma", "Vihaan Singh", "Ananya Gupta", "Rohan Kumar", "Isha Desai"];
-        const sources = ["Direct", "Booking.com", "MakeMyTrip", "Direct", "Agoda", "WhatsApp"];
-        const statuses = ["Checked-in", "Confirmed", "Pending", "Checked-out"];
-        const todayStr = new Date();
-        
-        for (let i = 0; i < 20; i++) {
-          const inDate = new Date();
-          inDate.setDate(todayStr.getDate() + (Math.floor(Math.random() * 10) - 3));
-          const outDate = new Date(inDate);
-          outDate.setDate(inDate.getDate() + Math.floor(Math.random() * 4) + 1);
-          
-          mockBookings.push({
-            id: `bk_${i}`,
-            booking_ref: `HTL${1000 + i}`,
-            guest_name: names[i % names.length],
-            email: `guest${i}@example.com`,
-            phone: `+91 98765 432${(i%10).toString().padStart(2, '0')}`,
-            check_in_date: inDate.toISOString(),
-            check_out_date: outDate.toISOString(),
-            adults: 2,
-            children: i % 3 === 0 ? 1 : 0,
-            booking_source: sources[i % sources.length],
-            total_amount_inr: 12000 + (i * 1500),
-            status: statuses[i % statuses.length],
-            purpose: i % 2 === 0 ? "Leisure" : "Business",
-            ota_name: i % 2 !== 0 ? sources[i % sources.length] : undefined,
-            ota_commission_pct: i % 2 !== 0 ? 18 : 0,
-            whatsapp_opted: i % 2 === 0
-          });
-        }
-        setBookings(mockBookings.sort((a,b) => new Date(a.check_in_date).getTime() - new Date(b.check_in_date).getTime()));
+        console.error("Failed to fetch bookings:", err);
       } finally {
         setLoading(false);
       }
@@ -396,6 +364,11 @@ const Bookings = () => {
             </TableBody>
           </Table>
         </div>
+      </div>
+
+      {/* Footer */}
+      <div className="mt-10 pt-6 border-t border-slate-100 text-center text-[11px] text-slate-300">
+        © 2026 Fortiv Solutions. All rights reserved.
       </div>
     </DashboardLayout>
   );

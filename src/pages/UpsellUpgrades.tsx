@@ -44,15 +44,7 @@ const UpsellUpgrades = () => {
                 
                 setEntries(data as UpsellEntry[]);
             } catch (err) {
-                console.warn("Falling back to mock upsell data.", err);
-                const mockUpsells: UpsellEntry[] = [
-                    { booking_ref: "HTL1042", guest: "Aarav Patel", upgrade: "Deluxe → Executive", price: "₹2,500/nt", channel: "WhatsApp", sent_at: new Date().toISOString(), accepted: true, revenue: "₹5,000", variant: "A" },
-                    { booking_ref: "HTL1050", guest: "Rohan Kumar", upgrade: "Standard → Deluxe", price: "₹1,500/nt", channel: "WhatsApp", sent_at: new Date(Date.now() - 86400000).toISOString(), accepted: false, revenue: "₹0", variant: "B" },
-                    { booking_ref: "HTL1022", guest: "Isha Desai", upgrade: "Buffet Dinner Add-on", price: "₹1,200/pp", channel: "Email", sent_at: new Date(Date.now() - 172800000).toISOString(), accepted: true, revenue: "₹2,400", variant: "A" },
-                    { booking_ref: "HTL1019", guest: "Diya Sharma", upgrade: "Airport Transfer", price: "₹1,800/way", channel: "WhatsApp", sent_at: new Date(Date.now() - 259200000).toISOString(), accepted: true, revenue: "₹3,600", variant: "B" },
-                    { booking_ref: "HTL0998", guest: "Ananya Gupta", upgrade: "Early Check-in", price: "₹1,000", channel: "Email", sent_at: new Date(Date.now() - 345600000).toISOString(), accepted: false, revenue: "₹0", variant: "A" },
-                ];
-                setEntries(mockUpsells);
+                console.error("Failed to fetch upsell data:", err);
             } finally {
                 setLoading(false);
             }
@@ -216,6 +208,11 @@ const UpsellUpgrades = () => {
                         </tbody>
                     </table>
                 </div>
+            </div>
+
+            {/* Footer */}
+            <div className="mt-10 pt-6 border-t border-border text-center text-[11px] text-muted-foreground">
+                © 2026 Fortiv Solutions. All rights reserved.
             </div>
         </DashboardLayout>
     );

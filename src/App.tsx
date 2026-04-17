@@ -12,6 +12,7 @@ import UpsellUpgrades from "./pages/UpsellUpgrades";
 import PreArrival from "./pages/PreArrival";
 import NotFound from "./pages/NotFound";
 import Settings from "./pages/Settings";
+import { ProtectedRoute } from "@/components/ProtectedRoute";
 
 const queryClient = new QueryClient();
 
@@ -23,13 +24,13 @@ const App = () => (
       <BrowserRouter>
         <Routes>
           <Route path="/" element={<SignIn />} />
-          <Route path="/dashboard" element={<RevenueDashboard />} />
-          <Route path="/pricing" element={<PricingEngine />} />
-          <Route path="/bookings" element={<Bookings />} />
-          <Route path="/corporate" element={<CorporateAccounts />} />
-          <Route path="/upsell" element={<UpsellUpgrades />} />
-          <Route path="/pre-arrival" element={<PreArrival />} />
-          <Route path="/settings" element={<Settings />} />
+          <Route path="/dashboard" element={<ProtectedRoute><RevenueDashboard /></ProtectedRoute>} />
+          <Route path="/pricing" element={<ProtectedRoute><PricingEngine /></ProtectedRoute>} />
+          <Route path="/bookings" element={<ProtectedRoute><Bookings /></ProtectedRoute>} />
+          <Route path="/corporate" element={<ProtectedRoute><CorporateAccounts /></ProtectedRoute>} />
+          <Route path="/upsell" element={<ProtectedRoute><UpsellUpgrades /></ProtectedRoute>} />
+          <Route path="/pre-arrival" element={<ProtectedRoute><PreArrival /></ProtectedRoute>} />
+          <Route path="/settings" element={<ProtectedRoute><Settings /></ProtectedRoute>} />
           <Route path="*" element={<NotFound />} />
         </Routes>
       </BrowserRouter>

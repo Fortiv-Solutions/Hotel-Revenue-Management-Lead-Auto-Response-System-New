@@ -59,15 +59,7 @@ const PreArrival = () => {
                 
                 setLog(data as PreArrivalEntry[]);
             } catch (err) {
-                console.warn("Falling back to mock pre-arrival data.", err);
-                const mockLogs: PreArrivalEntry[] = [
-                    { id: "1", booking_id: "bk_1", message_type: "Spa Package", channel: "WhatsApp", sent_at: new Date().toISOString(), delivered: true, delivery_status: "Delivered", guest_response: "Yes, please book a couples massage for Tuesday.", revenue_inr: 5000, booked: true, trigger_days_before_checkin: 3 },
-                    { id: "2", booking_id: "bk_2", message_type: "Airport Transfer", channel: "Email", sent_at: new Date(Date.now() - 3600000).toISOString(), delivered: true, delivery_status: "Opened", guest_response: null, revenue_inr: 0, booked: false, trigger_days_before_checkin: 2 },
-                    { id: "3", booking_id: "bk_3", message_type: "Restaurant Booking", channel: "WhatsApp", sent_at: new Date(Date.now() - 86400000).toISOString(), delivered: true, delivery_status: "Read", guest_response: "Reserve a table for 2 at 8 PM.", revenue_inr: 3500, booked: true, trigger_days_before_checkin: 1 },
-                    { id: "4", booking_id: "bk_4", message_type: "Welcome Info", channel: "Email", sent_at: new Date(Date.now() - 172800000).toISOString(), delivered: true, delivery_status: "Delivered", guest_response: null, revenue_inr: 0, booked: false, trigger_days_before_checkin: 5 },
-                    { id: "5", booking_id: "bk_5", message_type: "Spa Upgrade", channel: "WhatsApp", sent_at: new Date(Date.now() - 259200000).toISOString(), delivered: true, delivery_status: "Delivered", guest_response: "Interested but what are the timings?", revenue_inr: 0, booked: false, trigger_days_before_checkin: 3 },
-                ];
-                setLog(mockLogs);
+                console.error("Failed to fetch pre-arrival data:", err);
             } finally {
                 setLoading(false);
             }
@@ -196,6 +188,11 @@ const PreArrival = () => {
                         </tbody>
                     </table>
                 </div>
+            </div>
+
+            {/* Footer */}
+            <div className="mt-10 pt-6 border-t border-border text-center text-[11px] text-muted-foreground">
+                © 2026 Fortiv Solutions. All rights reserved.
             </div>
         </DashboardLayout>
     );

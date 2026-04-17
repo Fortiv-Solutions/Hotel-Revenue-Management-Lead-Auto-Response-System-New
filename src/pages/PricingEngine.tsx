@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
 import { Info, TrendingUp, RefreshCw } from "lucide-react";
-import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Tooltip as RechartsTooltip, Legend } from "recharts";
+import { Radar, RadarChart, PolarGrid, PolarAngleAxis, PolarRadiusAxis, Tooltip as RechartsTooltip, Legend, ResponsiveContainer } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 
 interface RoomRate {
@@ -47,20 +47,7 @@ const PricingEngine = () => {
       setRooms(ratesData as RoomRate[]);
       setCompetitors(compData as Competitor[]);
     } catch(err) {
-      console.warn("Falling back to mock pricing data.", err);
-      setRooms([
-        { name: "Executive Suite", units: 12, rate: 24500, base_rate: 21000, change_pct: 16 },
-        { name: "Deluxe King", units: 45, rate: 12500, base_rate: 11000, change_pct: 13 },
-        { name: "Standard Twin", units: 60, rate: 8500, base_rate: 8500, change_pct: 0 },
-        { name: "Presidential", units: 2, rate: 85000, base_rate: 75000, change_pct: 13 }
-      ]);
-      setCompetitors([
-        { name: "Taj Palace", room_type: "Deluxe", their_rate: 14000, our_rate: 12500, position: "Value Advantage" },
-        { name: "The Oberoi", room_type: "Deluxe", their_rate: 16500, our_rate: 12500, position: "Value Advantage" },
-        { name: "Hyatt Regency", room_type: "Deluxe", their_rate: 12000, our_rate: 12500, position: "Premium" },
-        { name: "ITC Maurya", room_type: "Deluxe", their_rate: 12500, our_rate: 12500, position: "Parity" },
-        { name: "Le Meridien", room_type: "Deluxe", their_rate: 10500, our_rate: 12500, position: "Premium" }
-      ]);
+      console.error("Failed to fetch pricing data:", err);
     } finally {
       setLastUpdated(new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit" }));
       setLoading(false);
@@ -207,6 +194,11 @@ const PricingEngine = () => {
             </div>
           </div>
         )}
+      </div>
+
+      {/* Footer */}
+      <div className="mt-10 pt-6 border-t border-border text-center text-[11px] text-muted-foreground">
+        © 2026 Fortiv Solutions. All rights reserved.
       </div>
     </DashboardLayout>
   );

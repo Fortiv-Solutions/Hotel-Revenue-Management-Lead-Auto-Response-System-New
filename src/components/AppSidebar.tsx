@@ -9,6 +9,7 @@ import {
   TrendingUp,
   BellRing,
   LogOut,
+  User,
 } from "lucide-react";
 
 type NavItem = {
@@ -31,14 +32,14 @@ export const AppSidebar = () => {
   const navigate = useNavigate();
 
   return (
-    <aside className="hidden lg:flex flex-col w-[240px] min-h-screen bg-white border-r border-slate-100">
+    <aside className="hidden lg:flex flex-col w-[240px] h-screen sticky top-0 bg-white border-r border-slate-100">
       {/* Logo */}
       <div className="flex items-center gap-3 px-6 py-6">
-        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-teal-500 to-emerald-600 flex items-center justify-center shadow-md shadow-teal-200/50">
-          <DollarSign className="w-5 h-5 text-white" />
+        <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-500 to-indigo-600 flex items-center justify-center shadow-md shadow-violet-200/50">
+          <Building2 className="w-5 h-5 text-white" />
         </div>
         <div className="flex flex-col">
-          <span className="text-base font-extrabold text-slate-800 tracking-tight leading-none">HotelOS</span>
+          <span className="text-base font-extrabold text-slate-800 tracking-tight leading-none">Fortiv HotelOS</span>
         </div>
       </div>
 
@@ -52,15 +53,15 @@ export const AppSidebar = () => {
               to={item.path}
               className={`relative flex items-center gap-3 px-4 py-2.5 rounded-lg text-[13px] font-medium transition-all duration-150 group ${
                 isActive
-                  ? "bg-teal-50 text-teal-700"
+                  ? "bg-violet-50 text-violet-700"
                   : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"
               }`}
             >
               {/* Active indicator bar */}
               {isActive && (
-                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-teal-500 rounded-r-full" />
+                <span className="absolute left-0 top-1/2 -translate-y-1/2 w-[3px] h-5 bg-violet-500 rounded-r-full" />
               )}
-              <item.icon className={`w-[18px] h-[18px] ${isActive ? "text-teal-600" : "text-slate-400 group-hover:text-slate-500"}`} />
+              <item.icon className={`w-[18px] h-[18px] ${isActive ? "text-violet-600" : "text-slate-400 group-hover:text-slate-500"}`} />
               <span>{item.label}</span>
             </Link>
           );
@@ -73,20 +74,24 @@ export const AppSidebar = () => {
           to="/settings"
           className={`flex items-center gap-3 px-4 py-2.5 rounded-lg text-[13px] font-medium transition-all ${
             location.pathname === "/settings"
-              ? "bg-teal-50 text-teal-700"
+              ? "bg-violet-50 text-violet-700"
               : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"
           }`}
         >
           <Settings className="w-[18px] h-[18px]" />
           <span>Settings</span>
         </Link>
-        <button
-          onClick={() => navigate("/")}
-          className="w-full flex items-center gap-3 px-4 py-2.5 rounded-lg text-[13px] font-medium text-slate-400 hover:bg-red-50 hover:text-red-500 transition-all"
+        <Link
+          to="/profile"
+          className={`flex items-center gap-3 px-4 py-2.5 rounded-lg text-[13px] font-medium transition-all ${
+            location.pathname === "/profile"
+              ? "bg-violet-50 text-violet-700"
+              : "text-slate-500 hover:bg-slate-50 hover:text-slate-700"
+          }`}
         >
-          <LogOut className="w-[18px] h-[18px]" />
-          <span>Sign Out</span>
-        </button>
+          <User className="w-[18px] h-[18px]" />
+          <span>Profile</span>
+        </Link>
       </div>
     </aside>
   );

@@ -1,294 +1,525 @@
-import { useEffect, useState } from "react";
+import { useEffect, useState, useMemo } from "react";
 import DashboardLayout from "@/components/DashboardLayout";
-import { Download, TrendingUp, TrendingDown, AlertTriangle, Bell, DollarSign, BedDouble, BarChart3, Users, ArrowUpRight } from "lucide-react";
 import {
-  LineChart, Line, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip,
-  PieChart, Pie, Cell, AreaChart, Area,
+  Download, IndianRupee, BedDouble, BarChart3, Users, Target,
+  MapPin, AlertTriangle, TrendingUp, TrendingDown,
+} from "lucide-react";
+import {
+  AreaChart, Area, XAxis, YAxis, CartesianGrid, ResponsiveContainer, Tooltip,
+  PieChart, Pie, Cell, ComposedChart, Bar, Line,
 } from "recharts";
 import { supabase } from "@/integrations/supabase/client";
 import { DateRangePicker } from "@/components/dashboard/DateRangePicker";
 
-// ── Helpers ─────────────────────────────────────────────────────────────────
-interface BookingRow {
-  total_amount_inr: number | null;
-  booking_source: string | null;
-  status: string | null;
-  check_in_date: string | null;
+// ── Types ───────────────────────────────────────────────────────────────────
+interface RevenueAnalyticsRow {
+  date: string;
+  total_revenue_inr: number;
+  room_revenue_inr: number;
+  ancillary_revenue_inr: number;
+  upsell_revenue_inr: number;
+  adr_inr: number;
+  revpar_inr: number;
+  revpar_target_inr: number;
+  occupancy_pct: number;
+  bookings_direct: number;
+  bookings_ota: number;
+  bookings_corporate: number;
+  ota_commission_paid_inr: number;
+  direct_booking_ratio_pct: number;
 }
 
-const classifyChannel = (source: string | null): "OTA" | "Direct" | "Corp" => {
-  if (!source) return "OTA";
-  const s = source.toLowerCase();
-  if (s === "direct") return "Direct";
-  if (["tcs", "infosys", "wipro", "accenture", "corporate"].some((k) => s.includes(k))) return "Corp";
-  return "OTA";
+interface OccupancyRow {
+  date: string;
+  total_rooms: number;
+  occupied_rooms: number;
+  occupancy_pct: number;
+  demand_level: string;
+  walk_ins: number;
+  cancellations: number;
+  no_shows: number;
+}
+
+interface LocalEvent {
+  id: string;
+  event_name: string;
+  event_type: string;
+  city: string;
+  date: string;
+}
+
+// ── Helpers ─────────────────────────────────────────────────────────────────
+const fmtCurrency = (n: number): string => {
+  if (n >= 10000000) return `₹${(n / 10000000).toFixed(2)}Cr`;
+  if (n >= 100000) return `₹${(n / 100000).toFixed(2)}L`;
+  return `₹${Math.round(n).toLocaleString("en-IN")}`;
 };
 
-const parseAmount = (val: any): number => (val ? Number(val) || 0 : 0);
-const fmtCurrency = (n: number) =>
-  n >= 100000 ? `₹${(n / 100000).toFixed(2)}L` : `₹${n.toLocaleString("en-IN")}`;
+const fmtShortDate = (d: string): string => {
+  const date = new Date(d + "T00:00:00");
+  return date.toLocaleDateString("en-IN", { month: "short", day: "numeric" });
+};
 
 const CHANNEL_COLORS: Record<string, string> = {
-  OTA: "#f59e0b",
   Direct: "#10b981",
-  Corp: "#3b82f6",
+  OTA: "#f59e0b",
+  Corporate: "#6366f1",
 };
 
-const DAYS_SHORT = ["SUN", "MON", "TUE", "WED", "THU", "FRI", "SAT"];
-
-const getHeatColor = (pct: number) => {
-  if (pct >= 80) return "bg-emerald-500 text-white";
-  if (pct >= 50) return "bg-amber-400 text-white";
-  return "bg-red-400 text-white";
+const EVENT_TYPE_COLORS: Record<string, string> = {
+  conference: "bg-blue-50 text-blue-600 border-blue-100",
+  festival: "bg-amber-50 text-amber-600 border-amber-100",
+  sports: "bg-green-50 text-green-600 border-green-100",
+  exhibition: "bg-violet-50 text-violet-600 border-violet-100",
 };
+
+const tooltipStyle = {
+  background: "#fff",
+  border: "1px solid #e2e8f0",
+  borderRadius: 12,
+  fontSize: 12,
+  boxShadow: "0 4px 12px -2px rgb(0 0 0 / 0.08)",
+  padding: "10px 14px",
+};
+
+// ── Skeleton ────────────────────────────────────────────────────────────────
+const CardSkeleton = () => (
+  <div className="bg-white rounded-2xl border border-slate-100 p-5 animate-pulse">
+    <div className="h-3 bg-slate-100 rounded w-24 mb-3" />
+    <div className="h-7 bg-slate-100 rounded w-32 mb-2" />
+    <div className="h-3 bg-slate-100 rounded w-20" />
+  </div>
+);
+
+const ChartSkeleton = ({ height = 260 }: { height?: number }) => (
+  <div className="flex items-center justify-center animate-pulse" style={{ height }}>
+    <div className="flex flex-col items-center gap-2">
+      <div className="w-8 h-8 rounded-full border-[3px] border-teal-200 border-t-teal-500 animate-spin" />
+      <span className="text-xs text-slate-400 font-medium">Loading data…</span>
+    </div>
+  </div>
+);
+
+const EmptyState = ({ message }: { message: string }) => (
+  <div className="flex flex-col items-center justify-center py-12 text-center">
+    <div className="w-12 h-12 rounded-2xl bg-slate-50 flex items-center justify-center mb-3">
+      <BarChart3 className="w-5 h-5 text-slate-300" />
+    </div>
+    <p className="text-sm text-slate-400 font-medium">{message}</p>
+    <p className="text-xs text-slate-300 mt-1">Add data in Supabase to see analytics here.</p>
+  </div>
+);
 
 // ── Dashboard ───────────────────────────────────────────────────────────────
 const RevenueDashboard = () => {
-  const [bookings, setBookings] = useState<BookingRow[]>([]);
+  const [revenueData, setRevenueData] = useState<RevenueAnalyticsRow[]>([]);
+  const [occupancyData, setOccupancyData] = useState<OccupancyRow[]>([]);
+  const [events, setEvents] = useState<LocalEvent[]>([]);
   const [loading, setLoading] = useState(true);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
   const [dateRange, setDateRange] = useState<{ from: Date; to: Date; label: string } | null>(null);
-  const [revenueTrend, setRevenueTrend] = useState<{ day: string; actual: number }[]>([]);
-  const [heatmapData, setHeatmapData] = useState<{ date: string; day: string; pct: number }[]>([]);
 
+  // ── Data Fetching ──────────────────────────────────────────────────────
   useEffect(() => {
-    const fetchBookings = async () => {
+    const fetchAll = async () => {
       setLoading(true);
       try {
-        let query = supabase
-          .from("bookings")
-          .select("total_amount_inr, booking_source, status, check_in_date");
+        let revQuery = supabase
+          .from("revenue_analytics_daily")
+          .select("date, total_revenue_inr, room_revenue_inr, ancillary_revenue_inr, upsell_revenue_inr, adr_inr, revpar_inr, revpar_target_inr, occupancy_pct, bookings_direct, bookings_ota, bookings_corporate, ota_commission_paid_inr, direct_booking_ratio_pct")
+          .order("date", { ascending: true });
+
+        let occQuery = supabase
+          .from("occupancy_daily")
+          .select("date, total_rooms, occupied_rooms, occupancy_pct, demand_level, walk_ins, cancellations, no_shows")
+          .order("date", { ascending: true });
+
+        let evtQuery = supabase
+          .from("local_events")
+          .select("id, event_name, event_type, city, date")
+          .order("date", { ascending: true });
 
         if (dateRange?.from && dateRange?.to) {
-          query = query
-            .gte("check_in_date", dateRange.from.toISOString())
-            .lte("check_in_date", dateRange.to.toISOString());
+          const from = dateRange.from.toISOString().slice(0, 10);
+          const to = dateRange.to.toISOString().slice(0, 10);
+          revQuery = revQuery.gte("date", from).lte("date", to);
+          occQuery = occQuery.gte("date", from).lte("date", to);
+          evtQuery = evtQuery.gte("date", from).lte("date", to);
         }
 
-        const { data, error } = await query;
-        
-        if (error) throw error;
-        if (!data || data.length === 0) throw new Error("No data found");
+        const [revRes, occRes, evtRes] = await Promise.all([revQuery, occQuery, evtQuery]);
 
-        setBookings(data as any[]);
-        buildTrend(data as BookingRow[]);
-        buildHeatmap(data as BookingRow[]);
-      } catch (err) {
-        console.warn("Supabase connection failed or empty. Falling back to realistic mock data.", err);
-        // Generate realistic 14-day mock data if DB fails
-        const mockData: BookingRow[] = [];
-        const today = new Date();
-        const sources = ["Direct", "Direct", "OTA", "OTA", "OTA", "Corp", "MakeMyTrip"];
-        const statuses = ["Checked-in", "Checked-in", "Confirmed", "Pending", "Checked-out"];
-        
-        for (let i = 0; i < 85; i++) {
-          const pastDate = new Date();
-          pastDate.setDate(today.getDate() - Math.floor(Math.random() * 14));
-          mockData.push({
-            total_amount_inr: Math.floor(Math.random() * 25000) + 5000,
-            booking_source: sources[Math.floor(Math.random() * sources.length)],
-            status: statuses[Math.floor(Math.random() * statuses.length)],
-            check_in_date: pastDate.toISOString(),
-          });
-        }
-        
-        setBookings(mockData);
-        buildTrend(mockData);
-        buildHeatmap(mockData);
+        if (revRes.error) setErrorMsg(`Revenue Error: ${revRes.error.message}`);
+        else if (occRes.error) setErrorMsg(`Occupancy Error: ${occRes.error.message}`);
+        else if (evtRes.error) setErrorMsg(`Events Error: ${evtRes.error.message}`);
+        else setErrorMsg(null);
+
+        setRevenueData((revRes.data as RevenueAnalyticsRow[]) ?? []);
+        setOccupancyData((occRes.data as OccupancyRow[]) ?? []);
+        setEvents((evtRes.data as LocalEvent[]) ?? []);
+      } catch (err: any) {
+        setErrorMsg(`Fetch Exception: ${err.message}`);
+        console.error("Dashboard fetch failed:", err);
       } finally {
         setLoading(false);
       }
     };
-    fetchBookings();
+    fetchAll();
   }, [dateRange]);
 
-  const buildTrend = (data: BookingRow[]) => {
-    const dayMap: Record<string, number> = {};
-    data.forEach((b) => {
-      if (!b.check_in_date) return;
-      const day = DAYS_SHORT[new Date(b.check_in_date).getDay()];
-      dayMap[day] = (dayMap[day] || 0) + parseAmount(b.total_amount_inr);
-    });
-    setRevenueTrend(DAYS_SHORT.map((day) => ({ day, actual: dayMap[day] || 0 })));
-  };
+  // ── Derived KPIs ───────────────────────────────────────────────────────
+  const kpis = useMemo(() => {
+    if (revenueData.length === 0) return null;
+    const len = revenueData.length;
 
-  const buildHeatmap = (data: BookingRow[]) => {
-    const dayCountMap: Record<string, number> = {};
-    data.forEach((b) => {
-      if (!b.check_in_date) return;
-      const key = b.check_in_date.slice(0, 10);
-      dayCountMap[key] = (dayCountMap[key] || 0) + 1;
-    });
-    const allDays = Object.keys(dayCountMap).sort();
-    const last14 = allDays.slice(-14);
-    const maxCount = Math.max(1, ...last14.map((k) => dayCountMap[k]));
-    setHeatmapData(
-      last14.map((key) => {
-        const date = new Date(key);
-        return {
-          date: date.toLocaleDateString("en-IN", { month: "short", day: "numeric" }).toUpperCase(),
-          day: DAYS_SHORT[date.getDay()],
-          pct: Math.round((dayCountMap[key] / maxCount) * 100),
-        };
-      })
-    );
-  };
+    const totalRevenue = revenueData.reduce((s, r) => s + (r.total_revenue_inr || 0), 0);
+    const avgAdr = revenueData.reduce((s, r) => s + (r.adr_inr || 0), 0) / len;
+    const avgRevpar = revenueData.reduce((s, r) => s + (r.revpar_inr || 0), 0) / len;
+    const avgRevparTarget = revenueData.reduce((s, r) => s + (r.revpar_target_inr || 0), 0) / len;
+    const avgOccupancy = revenueData.reduce((s, r) => s + (r.occupancy_pct || 0), 0) / len;
+    const avgDirectPct = revenueData.reduce((s, r) => s + (r.direct_booking_ratio_pct || 0), 0) / len;
+    const totalOtaCommission = revenueData.reduce((s, r) => s + (r.ota_commission_paid_inr || 0), 0);
+    const totalDirect = revenueData.reduce((s, r) => s + (r.bookings_direct || 0), 0);
+    const totalOta = revenueData.reduce((s, r) => s + (r.bookings_ota || 0), 0);
+    const totalCorp = revenueData.reduce((s, r) => s + (r.bookings_corporate || 0), 0);
 
-  // ── Derived KPIs ──────────────────────────────────────────────────────────
-  const totalRevenue = bookings.reduce((sum, b) => sum + parseAmount(b.total_amount_inr), 0);
-  const totalBookings = bookings.length;
-  const directBookings = bookings.filter((b) => classifyChannel(b.booking_source) === "Direct").length;
-  const directPct = totalBookings > 0 ? Math.round((directBookings / totalBookings) * 100) : 0;
-  const checkedIn = bookings.filter((b) => b.status === "Checked-in").length;
-  const occupancyPct = totalBookings > 0 ? Math.round((checkedIn / totalBookings) * 100) : 0;
-  const adr = totalBookings > 0 ? Math.round(totalRevenue / totalBookings) : 0;
+    return {
+      totalRevenue,
+      avgAdr: Math.round(avgAdr),
+      avgRevpar: Math.round(avgRevpar),
+      avgRevparTarget: Math.round(avgRevparTarget),
+      avgOccupancy: Math.round(avgOccupancy * 10) / 10,
+      avgDirectPct: Math.round(avgDirectPct * 10) / 10,
+      totalOtaCommission,
+      totalDirect,
+      totalOta,
+      totalCorp,
+      revparVsTarget: avgRevparTarget > 0
+        ? Math.round(((avgRevpar - avgRevparTarget) / avgRevparTarget) * 100)
+        : 0,
+    };
+  }, [revenueData]);
 
-  // ── Channel Mix ───────────────────────────────────────────────────────────
-  const channelCounts: Record<string, number> = { OTA: 0, Direct: 0, Corp: 0 };
-  const channelRevenue: Record<string, number> = { OTA: 0, Direct: 0, Corp: 0 };
-  bookings.forEach((b) => {
-    const ch = classifyChannel(b.booking_source);
-    channelCounts[ch]++;
-    channelRevenue[ch] += parseAmount(b.total_amount_inr);
-  });
+  // ── Chart Data ─────────────────────────────────────────────────────────
+  const revenueTrendData = useMemo(() =>
+    revenueData.map((r) => ({
+      date: fmtShortDate(r.date),
+      Room: r.room_revenue_inr || 0,
+      Ancillary: r.ancillary_revenue_inr || 0,
+      Upsell: r.upsell_revenue_inr || 0,
+    })),
+  [revenueData]);
 
-  const channelMix = totalBookings > 0
-    ? Object.entries(channelCounts).map(([name, count]) => ({
-        name,
-        value: Math.round((count / totalBookings) * 100),
-        color: CHANNEL_COLORS[name],
-      }))
+  const occupancyTrendData = useMemo(() =>
+    occupancyData.map((o) => ({
+      date: fmtShortDate(o.date),
+      occupancy: o.occupancy_pct || 0,
+      demand: o.demand_level || "normal",
+    })),
+  [occupancyData]);
+
+  const channelMixData = useMemo(() => {
+    if (!kpis) return [];
+    const total = kpis.totalDirect + kpis.totalOta + kpis.totalCorp;
+    if (total === 0) return [];
+    return [
+      { name: "Direct", value: kpis.totalDirect, pct: Math.round((kpis.totalDirect / total) * 100), color: CHANNEL_COLORS.Direct },
+      { name: "OTA", value: kpis.totalOta, pct: Math.round((kpis.totalOta / total) * 100), color: CHANNEL_COLORS.OTA },
+      { name: "Corporate", value: kpis.totalCorp, pct: Math.round((kpis.totalCorp / total) * 100), color: CHANNEL_COLORS.Corporate },
+    ];
+  }, [kpis]);
+
+  const revparTrendData = useMemo(() =>
+    revenueData.map((r) => ({
+      date: fmtShortDate(r.date),
+      Actual: r.revpar_inr || 0,
+      Target: r.revpar_target_inr || 0,
+    })),
+  [revenueData]);
+
+  // ── KPI Card Config ────────────────────────────────────────────────────
+  const kpiCards = kpis
+    ? [
+        {
+          label: "Total Revenue",
+          value: fmtCurrency(kpis.totalRevenue),
+          sub: `${revenueData.length} days`,
+          icon: IndianRupee,
+          iconBg: "bg-emerald-50",
+          iconColor: "text-emerald-600",
+        },
+        {
+          label: "ADR",
+          value: `₹${kpis.avgAdr.toLocaleString("en-IN")}`,
+          sub: "Avg daily rate",
+          icon: BarChart3,
+          iconBg: "bg-violet-50",
+          iconColor: "text-violet-600",
+        },
+        {
+          label: "RevPAR",
+          value: `₹${kpis.avgRevpar.toLocaleString("en-IN")}`,
+          sub: kpis.revparVsTarget >= 0
+            ? `${kpis.revparVsTarget}% above target`
+            : `${Math.abs(kpis.revparVsTarget)}% below target`,
+          icon: Target,
+          iconBg: "bg-teal-50",
+          iconColor: "text-teal-600",
+          trend: kpis.revparVsTarget >= 0 ? "up" : "down",
+        },
+        {
+          label: "Occupancy",
+          value: `${kpis.avgOccupancy}%`,
+          sub: kpis.avgOccupancy >= 70 ? "Healthy" : kpis.avgOccupancy >= 50 ? "Moderate" : "Needs attention",
+          icon: BedDouble,
+          iconBg: "bg-blue-50",
+          iconColor: "text-blue-600",
+          pct: kpis.avgOccupancy,
+          trend: kpis.avgOccupancy >= 60 ? "up" : "down",
+        },
+        {
+          label: "Direct Booking",
+          value: `${kpis.avgDirectPct}%`,
+          sub: `${kpis.totalDirect} direct of ${kpis.totalDirect + kpis.totalOta + kpis.totalCorp}`,
+          icon: Users,
+          iconBg: "bg-amber-50",
+          iconColor: "text-amber-600",
+          trend: kpis.avgDirectPct >= 30 ? "up" : "down",
+        },
+      ]
     : [];
-
-  const otaCommission = Math.round(channelRevenue.OTA * 0.2);
-
-  const kpis = [
-    {
-      label: "Total Revenue",
-      value: loading ? "..." : fmtCurrency(totalRevenue),
-      sub: "from bookings",
-      icon: DollarSign,
-      iconBg: "bg-emerald-50",
-      iconColor: "text-emerald-600",
-      accent: "text-emerald-500",
-      trend: "+Live",
-    },
-    {
-      label: "Occupancy",
-      value: loading ? "..." : `${occupancyPct}%`,
-      sub: `${checkedIn} checked in`,
-      icon: BedDouble,
-      iconBg: "bg-blue-50",
-      iconColor: "text-blue-600",
-      accent: occupancyPct >= 50 ? "text-emerald-500" : "text-red-500",
-      trend: occupancyPct >= 50 ? "Healthy" : "Low",
-      pct: occupancyPct,
-    },
-    {
-      label: "ADR",
-      value: loading ? "..." : `₹${adr.toLocaleString("en-IN")}`,
-      sub: "Average daily rate",
-      icon: BarChart3,
-      iconBg: "bg-violet-50",
-      iconColor: "text-violet-600",
-      accent: "text-violet-500",
-    },
-    {
-      label: "Direct Booking",
-      value: loading ? "..." : `${directPct}%`,
-      sub: `${directBookings} of ${totalBookings} bookings`,
-      icon: Users,
-      iconBg: "bg-amber-50",
-      iconColor: "text-amber-600",
-      accent: directPct >= 30 ? "text-emerald-500" : "text-amber-500",
-      trend: directPct >= 30 ? "Good" : "Needs push",
-    },
-  ];
 
   return (
     <DashboardLayout>
-      {/* ── TOP BAR ────────────────────────────────────────────────────────── */}
+      {/* ── HEADER ──────────────────────────────────────────────────────── */}
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h1 className="text-xl font-extrabold text-slate-800 tracking-tight">Revenue Dashboard</h1>
-          <p className="text-sm text-slate-400 mt-0.5">Financial overview for the current period</p>
+          <h1 className="text-xl font-extrabold text-slate-800 tracking-tight">
+            Revenue Dashboard
+          </h1>
+          <p className="text-sm text-slate-400 mt-0.5">
+            Financial overview • All data from Supabase
+          </p>
         </div>
         <div className="flex items-center gap-3">
           <DateRangePicker onRangeChange={setDateRange} />
-          <button className="relative p-2.5 rounded-xl border border-slate-200 bg-white text-slate-400 hover:text-slate-600 hover:border-slate-300 transition-all">
-            <Bell className="w-4 h-4" />
-            <span className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full text-[9px] text-white font-bold flex items-center justify-center">3</span>
-          </button>
           <button className="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-800 text-white text-xs font-bold hover:bg-slate-700 transition-all shadow-sm">
             <Download className="w-3.5 h-3.5" />
-            Export Data
+            Export
           </button>
         </div>
       </div>
 
-      {/* ── KPI STRIP ──────────────────────────────────────────────────────── */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
-        {kpis.map((kpi) => (
-          <div key={kpi.label} className="bg-white rounded-2xl border border-slate-100 p-5 hover:shadow-md hover:border-slate-200 transition-all duration-200">
-            <div className="flex items-start justify-between mb-3">
-              <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">{kpi.label}</p>
-              <div className={`w-8 h-8 rounded-xl ${kpi.iconBg} flex items-center justify-center`}>
-                <kpi.icon className={`w-4 h-4 ${kpi.iconColor}`} />
-              </div>
+      {errorMsg && (
+        <div className="mb-6 p-4 bg-red-50 border border-red-200 rounded-xl text-red-600 text-sm font-medium">
+          🚨 Supabase Query Failed: {errorMsg}
+        </div>
+      )}
+
+      {/* ── KPI STRIP ───────────────────────────────────────────────────── */}
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-8">
+        {loading
+          ? Array.from({ length: 5 }).map((_, i) => <CardSkeleton key={i} />)
+          : kpiCards.length === 0
+          ? (
+            <div className="col-span-full">
+              <EmptyState message="No revenue data found for this period" />
             </div>
-            <p className="text-2xl font-extrabold text-slate-800 tracking-tight">{kpi.value}</p>
-            <div className="flex items-center gap-2 mt-2">
-              {kpi.trend && (
-                <span className={`text-[11px] font-bold ${kpi.accent}`}>{kpi.trend}</span>
+          )
+          : kpiCards.map((kpi) => (
+            <div
+              key={kpi.label}
+              className="bg-white rounded-2xl border border-slate-100 p-5 hover:shadow-md hover:border-slate-200 transition-all duration-200"
+            >
+              <div className="flex items-start justify-between mb-3">
+                <p className="text-[10px] text-slate-400 font-bold uppercase tracking-wider">
+                  {kpi.label}
+                </p>
+                <div className={`w-8 h-8 rounded-xl ${kpi.iconBg} flex items-center justify-center`}>
+                  <kpi.icon className={`w-4 h-4 ${kpi.iconColor}`} />
+                </div>
+              </div>
+              <p className="text-2xl font-extrabold text-slate-800 tracking-tight">
+                {kpi.value}
+              </p>
+              <div className="flex items-center gap-1.5 mt-2">
+                {kpi.trend && (
+                  kpi.trend === "up"
+                    ? <TrendingUp className="w-3 h-3 text-emerald-500" />
+                    : <TrendingDown className="w-3 h-3 text-red-400" />
+                )}
+                <span className={`text-[11px] font-semibold ${
+                  kpi.trend === "up" ? "text-emerald-500" : kpi.trend === "down" ? "text-red-400" : "text-slate-400"
+                }`}>
+                  {kpi.sub}
+                </span>
+              </div>
+              {kpi.pct !== undefined && (
+                <div className="w-full h-1.5 bg-slate-100 rounded-full mt-3 overflow-hidden">
+                  <div
+                    className={`h-full rounded-full transition-all duration-700 ${
+                      kpi.pct >= 70
+                        ? "bg-gradient-to-r from-emerald-400 to-emerald-600"
+                        : kpi.pct >= 50
+                        ? "bg-gradient-to-r from-amber-400 to-amber-500"
+                        : "bg-gradient-to-r from-red-400 to-red-500"
+                    }`}
+                    style={{ width: `${Math.min(100, kpi.pct)}%` }}
+                  />
+                </div>
               )}
-              <span className="text-[11px] text-slate-400">{kpi.sub}</span>
             </div>
-            {kpi.pct !== undefined && (
-              <div className="w-full h-1.5 bg-slate-100 rounded-full mt-3 overflow-hidden">
-                <div
-                  className="h-full bg-gradient-to-r from-blue-400 to-blue-600 rounded-full transition-all duration-700"
-                  style={{ width: `${kpi.pct}%` }}
-                />
-              </div>
-            )}
-          </div>
-        ))}
+          ))}
       </div>
 
-      {/* ── MAIN 3-COLUMN GRID ─────────────────────────────────────────────── */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+      {/* ── REVENUE TREND (Full-Width) ──────────────────────────────────── */}
+      <div className="bg-white rounded-2xl border border-slate-100 p-5 mb-6">
+        <div className="flex items-center justify-between mb-1">
+          <h3 className="text-sm font-bold text-slate-700">Revenue Trend</h3>
+          <div className="flex items-center gap-4 text-[11px] text-slate-400 font-medium">
+            <span className="flex items-center gap-1.5">
+              <span className="w-3 h-[3px] bg-teal-500 rounded-full inline-block" /> Room
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-3 h-[3px] bg-violet-400 rounded-full inline-block" /> Ancillary
+            </span>
+            <span className="flex items-center gap-1.5">
+              <span className="w-3 h-[3px] bg-amber-400 rounded-full inline-block" /> Upsell
+            </span>
+          </div>
+        </div>
+        {kpis && (
+          <div className="flex items-baseline gap-2 mb-4">
+            <span className="text-2xl font-extrabold text-slate-800">
+              {fmtCurrency(kpis.totalRevenue)}
+            </span>
+            <span className="text-xs text-slate-400">total for period</span>
+          </div>
+        )}
 
-        {/* ── LEFT COLUMN (Span 3) ── Channel Mix + OTA Alert ───────────── */}
-        <div className="lg:col-span-3 space-y-6">
+        {loading ? (
+          <ChartSkeleton height={260} />
+        ) : revenueTrendData.length === 0 ? (
+          <EmptyState message="No revenue data for this period" />
+        ) : (
+          <ResponsiveContainer width="100%" height={260}>
+            <AreaChart data={revenueTrendData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+              <defs>
+                <linearGradient id="roomFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#14b8a6" stopOpacity={0.2} />
+                  <stop offset="95%" stopColor="#14b8a6" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="ancillaryFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#8b5cf6" stopOpacity={0.15} />
+                  <stop offset="95%" stopColor="#8b5cf6" stopOpacity={0} />
+                </linearGradient>
+                <linearGradient id="upsellFill" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="5%" stopColor="#f59e0b" stopOpacity={0.15} />
+                  <stop offset="95%" stopColor="#f59e0b" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+              <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8", fontWeight: 500 }} />
+              <YAxis hide />
+              <Tooltip
+                contentStyle={tooltipStyle}
+                labelStyle={{ color: "#94a3b8", fontWeight: 600, fontSize: 11 }}
+                formatter={(value: number, name: string) => [fmtCurrency(value), name]}
+              />
+              <Area type="monotone" dataKey="Room" stroke="#14b8a6" strokeWidth={2} fill="url(#roomFill)" stackId="1" />
+              <Area type="monotone" dataKey="Ancillary" stroke="#8b5cf6" strokeWidth={2} fill="url(#ancillaryFill)" stackId="1" />
+              <Area type="monotone" dataKey="Upsell" stroke="#f59e0b" strokeWidth={2} fill="url(#upsellFill)" stackId="1" />
+            </AreaChart>
+          </ResponsiveContainer>
+        )}
+      </div>
+
+      {/* ── ROW 2: Occupancy Trend + Channel Mix ────────────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6 mb-6">
+
+        {/* Occupancy Trend */}
+        <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-100 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-sm font-bold text-slate-700">Occupancy Trend</h3>
+              {kpis && (
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Avg: <span className="font-bold text-slate-600">{kpis.avgOccupancy}%</span>
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-3 text-[11px] text-slate-400 font-medium">
+              <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-blue-500" /> Occupancy %</span>
+            </div>
+          </div>
+
+          {loading ? (
+            <ChartSkeleton />
+          ) : occupancyTrendData.length === 0 ? (
+            <EmptyState message="No occupancy data for this period" />
+          ) : (
+            <ResponsiveContainer width="100%" height={240}>
+              <AreaChart data={occupancyTrendData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                <defs>
+                  <linearGradient id="occFill" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="5%" stopColor="#3b82f6" stopOpacity={0.2} />
+                    <stop offset="95%" stopColor="#3b82f6" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8", fontWeight: 500 }} />
+                <YAxis domain={[0, 100]} tickLine={false} axisLine={false} tick={{ fontSize: 10, fill: "#94a3b8" }} tickFormatter={(v) => `${v}%`} />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  formatter={(value: number) => [`${value}%`, "Occupancy"]}
+                />
+                <Area
+                  type="monotone" dataKey="occupancy" stroke="#3b82f6" strokeWidth={2.5}
+                  fill="url(#occFill)" dot={false}
+                  activeDot={{ r: 5, strokeWidth: 2, stroke: "#fff", fill: "#3b82f6" }}
+                />
+              </AreaChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* Channel Mix + OTA Commission */}
+        <div className="lg:col-span-5 space-y-6">
           {/* Channel Distribution */}
           <div className="bg-white rounded-2xl border border-slate-100 p-5">
             <h3 className="text-sm font-bold text-slate-700 mb-4">Channel Distribution</h3>
             {loading ? (
-              <div className="h-[180px] flex items-center justify-center text-slate-400 text-xs animate-pulse">Loading...</div>
-            ) : channelMix.length === 0 ? (
-              <div className="h-[180px] flex items-center justify-center text-slate-400 text-sm">No data yet</div>
+              <ChartSkeleton height={160} />
+            ) : channelMixData.length === 0 ? (
+              <div className="text-center py-8 text-sm text-slate-400">No channel data</div>
             ) : (
               <>
                 <div className="flex justify-center mb-4">
-                  <ResponsiveContainer width={160} height={160}>
+                  <ResponsiveContainer width={150} height={150}>
                     <PieChart>
-                      <Pie data={channelMix} cx="50%" cy="50%" innerRadius={45} outerRadius={68} dataKey="value" stroke="none" strokeWidth={0}>
-                        {channelMix.map((entry, i) => (
+                      <Pie
+                        data={channelMixData} cx="50%" cy="50%"
+                        innerRadius={42} outerRadius={65}
+                        dataKey="value" stroke="none"
+                      >
+                        {channelMixData.map((entry, i) => (
                           <Cell key={i} fill={entry.color} />
                         ))}
                       </Pie>
                     </PieChart>
                   </ResponsiveContainer>
                 </div>
-
-                {/* Legend items */}
                 <div className="space-y-2.5">
-                  {channelMix.map((ch) => (
+                  {channelMixData.map((ch) => (
                     <div key={ch.name} className="flex items-center justify-between">
                       <div className="flex items-center gap-2.5">
                         <span className="w-2.5 h-2.5 rounded-full shrink-0" style={{ background: ch.color }} />
                         <span className="text-xs text-slate-500 font-medium">{ch.name}</span>
                       </div>
-                      <span className="text-xs font-bold text-slate-700">{ch.value}%</span>
+                      <div className="flex items-center gap-2">
+                        <span className="text-xs text-slate-400">{ch.value} bookings</span>
+                        <span className="text-xs font-bold text-slate-700">{ch.pct}%</span>
+                      </div>
                     </div>
                   ))}
                 </div>
@@ -297,215 +528,125 @@ const RevenueDashboard = () => {
           </div>
 
           {/* OTA Commission Alert */}
-          {otaCommission > 0 && (
+          {kpis && kpis.totalOtaCommission > 0 && (
             <div className="bg-amber-50 rounded-2xl border border-amber-100 p-5">
               <div className="flex items-start gap-3">
                 <div className="w-8 h-8 rounded-xl bg-amber-100 flex items-center justify-center shrink-0 mt-0.5">
                   <AlertTriangle className="w-4 h-4 text-amber-600" />
                 </div>
                 <div>
-                  <p className="text-xs font-bold text-amber-800 uppercase tracking-wider">OTA Commission Leakage</p>
-                  <p className="text-xl font-extrabold text-amber-700 mt-1">{fmtCurrency(otaCommission)}</p>
-                  <p className="text-[11px] text-amber-600/70 mt-1">~20% of OTA revenue lost to commissions</p>
+                  <p className="text-xs font-bold text-amber-800 uppercase tracking-wider">
+                    OTA Commission Paid
+                  </p>
+                  <p className="text-xl font-extrabold text-amber-700 mt-1">
+                    {fmtCurrency(kpis.totalOtaCommission)}
+                  </p>
+                  <p className="text-[11px] text-amber-600/70 mt-1">
+                    Actual commissions paid across {kpis.totalOta} OTA bookings
+                  </p>
                 </div>
               </div>
             </div>
           )}
-
-          {/* Booking Stats */}
-          <div className="bg-white rounded-2xl border border-slate-100 p-5">
-            <h3 className="text-sm font-bold text-slate-700 mb-4">Revenue by Channel</h3>
-            <div className="space-y-3">
-              {Object.entries(channelRevenue).map(([ch, rev]) => (
-                <div key={ch} className="flex items-center justify-between">
-                  <div className="flex items-center gap-2.5">
-                    <span className="w-2.5 h-2.5 rounded-full" style={{ background: CHANNEL_COLORS[ch] }} />
-                    <span className="text-xs text-slate-500 font-medium">{ch}</span>
-                  </div>
-                  <span className="text-xs font-bold text-slate-700">{fmtCurrency(rev)}</span>
-                </div>
-              ))}
-            </div>
-          </div>
-        </div>
-
-        {/* ── CENTER COLUMN (Span 6) ── Revenue Trend + Heatmap ─────────── */}
-        <div className="lg:col-span-6 space-y-6">
-          {/* Revenue Trend */}
-          <div className="bg-white rounded-2xl border border-slate-100 p-5">
-            <div className="flex items-center justify-between mb-1">
-              <h3 className="text-sm font-bold text-slate-700">Revenue Trend</h3>
-              <div className="flex items-center gap-4 text-xs text-slate-400">
-                <span className="flex items-center gap-1.5">
-                  <span className="w-3 h-[2px] bg-teal-500 rounded-full inline-block" />
-                  Actual
-                </span>
-              </div>
-            </div>
-            <div className="flex items-baseline gap-2 mb-4">
-              <span className="text-2xl font-extrabold text-slate-800">{fmtCurrency(totalRevenue)}</span>
-              <span className="text-xs text-slate-400">total</span>
-            </div>
-
-            {loading ? (
-              <div className="h-[220px] flex items-center justify-center text-slate-400 text-xs animate-pulse">Loading chart...</div>
-            ) : revenueTrend.every((d) => d.actual === 0) ? (
-              <div className="h-[220px] flex items-center justify-center text-slate-400 text-sm">No revenue data for this period.</div>
-            ) : (
-              <ResponsiveContainer width="100%" height={220}>
-                <AreaChart data={revenueTrend} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
-                  <defs>
-                    <linearGradient id="trendFill" x1="0" y1="0" x2="0" y2="1">
-                      <stop offset="5%" stopColor="#14b8a6" stopOpacity={0.15} />
-                      <stop offset="95%" stopColor="#14b8a6" stopOpacity={0} />
-                    </linearGradient>
-                  </defs>
-                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
-                  <XAxis
-                    dataKey="day"
-                    tickLine={false}
-                    axisLine={false}
-                    tick={{ fontSize: 11, fill: "#94a3b8", fontWeight: 500 }}
-                  />
-                  <YAxis hide />
-                  <Tooltip
-                    contentStyle={{
-                      background: "#fff",
-                      border: "1px solid #e2e8f0",
-                      borderRadius: 12,
-                      fontSize: 12,
-                      boxShadow: "0 4px 6px -1px rgb(0 0 0 / 0.07)",
-                      padding: "8px 14px",
-                    }}
-                    labelStyle={{ color: "#94a3b8", fontWeight: 600, fontSize: 11 }}
-                    formatter={(value: number) => [fmtCurrency(value), "Revenue"]}
-                  />
-                  <Area type="monotone" dataKey="actual" stroke="#14b8a6" strokeWidth={2.5} fill="url(#trendFill)" dot={false} activeDot={{ r: 5, strokeWidth: 2, stroke: "#fff", fill: "#14b8a6" }} />
-                </AreaChart>
-              </ResponsiveContainer>
-            )}
-          </div>
-
-          {/* Booking Density Heatmap */}
-          {heatmapData.length > 0 && (
-            <div className="bg-white rounded-2xl border border-slate-100 p-5">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="text-sm font-bold text-slate-700">Booking Density Heatmap</h3>
-                  <p className="text-[11px] text-slate-400 mt-0.5">Last 14 active days</p>
-                </div>
-                <div className="flex items-center gap-3 text-[11px] text-slate-400">
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-red-400" /> Low</span>
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-amber-400" /> Mid</span>
-                  <span className="flex items-center gap-1"><span className="w-2 h-2 rounded-full bg-emerald-500" /> High</span>
-                </div>
-              </div>
-              <div className="grid grid-cols-7 gap-2">
-                {heatmapData.map((d) => (
-                  <div key={d.date} className="text-center">
-                    <div className={`rounded-xl py-2.5 px-1 ${getHeatColor(d.pct)}`}>
-                      <p className="text-[9px] font-medium opacity-85">{d.date}</p>
-                      <p className="text-base font-extrabold">{d.pct}%</p>
-                    </div>
-                    <p className="text-[10px] text-slate-400 mt-1 font-medium">{d.day}</p>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* ── RIGHT COLUMN (Span 3) ── Actions Required + Quick Stats ───── */}
-        <div className="lg:col-span-3 space-y-6">
-          {/* Actions Required */}
-          <div className="bg-white rounded-2xl border border-slate-100 p-5">
-            <h3 className="text-sm font-bold text-slate-700 mb-4">Actions Required</h3>
-            <div className="space-y-2.5">
-              {[
-                { label: "Low-occupancy dates", count: heatmapData.filter(d => d.pct < 50).length, action: "Review", color: "bg-red-50 text-red-600", actionColor: "text-red-500" },
-                { label: "OTA-heavy bookings", count: channelCounts.OTA, action: "Optimize", color: "bg-amber-50 text-amber-600", actionColor: "text-amber-500" },
-                { label: "Pending check-ins", count: totalBookings - checkedIn, action: "Track", color: "bg-blue-50 text-blue-600", actionColor: "text-blue-500" },
-                { label: "Corporate renewals", count: channelCounts.Corp, action: "Contact", color: "bg-violet-50 text-violet-600", actionColor: "text-violet-500" },
-                { label: "Upsell opportunities", count: Math.max(0, Math.round(totalBookings * 0.15)), action: "Push", color: "bg-emerald-50 text-emerald-600", actionColor: "text-emerald-500" },
-              ].map((item) => (
-                <div key={item.label} className="flex items-center justify-between py-2 group">
-                  <div className="flex items-center gap-3">
-                    <span className={`w-7 h-7 rounded-lg ${item.color} flex items-center justify-center text-[10px] font-extrabold`}>
-                      {item.count}
-                    </span>
-                    <span className="text-xs text-slate-600 font-medium">{item.label}</span>
-                  </div>
-                  <button className={`text-[11px] font-bold ${item.actionColor} opacity-0 group-hover:opacity-100 transition-opacity flex items-center gap-0.5`}>
-                    {item.action}
-                    <ArrowUpRight className="w-3 h-3" />
-                  </button>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          {/* Quick Performance */}
-          <div className="bg-white rounded-2xl border border-slate-100 p-5">
-            <h3 className="text-sm font-bold text-slate-700 mb-4">Performance Snapshot</h3>
-            <div className="grid grid-cols-3 gap-3 text-center">
-              <div>
-                <p className="text-lg font-extrabold text-slate-800">{occupancyPct}%</p>
-                <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mt-0.5">OCC Rate</p>
-              </div>
-              <div>
-                <p className="text-lg font-extrabold text-slate-800">{directPct}%</p>
-                <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mt-0.5">Direct</p>
-              </div>
-              <div>
-                <p className="text-lg font-extrabold text-slate-800">{totalBookings}</p>
-                <p className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider mt-0.5">Bookings</p>
-              </div>
-            </div>
-
-            {/* Mini progress bars */}
-            <div className="mt-5 space-y-3">
-              <div>
-                <div className="flex justify-between text-[11px] mb-1">
-                  <span className="text-slate-500 font-medium">RevPAR Target</span>
-                  <span className="text-slate-700 font-bold">{Math.min(100, Math.round(occupancyPct * 1.2))}%</span>
-                </div>
-                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-gradient-to-r from-teal-400 to-teal-600 rounded-full" style={{ width: `${Math.min(100, occupancyPct * 1.2)}%` }} />
-                </div>
-              </div>
-              <div>
-                <div className="flex justify-between text-[11px] mb-1">
-                  <span className="text-slate-500 font-medium">Direct Booking Goal</span>
-                  <span className="text-slate-700 font-bold">{directPct}%</span>
-                </div>
-                <div className="w-full h-2 bg-slate-100 rounded-full overflow-hidden">
-                  <div className="h-full bg-gradient-to-r from-amber-400 to-amber-600 rounded-full" style={{ width: `${directPct}%` }} />
-                </div>
-              </div>
-            </div>
-          </div>
-
-          {/* Recent Activity */}
-          <div className="bg-white rounded-2xl border border-slate-100 p-5">
-            <h3 className="text-sm font-bold text-slate-700 mb-4">System Status</h3>
-            <div className="space-y-3">
-              {[
-                { label: "Supabase sync", status: "● Connected", color: "text-emerald-500" },
-                { label: "Pricing engine", status: "● Active", color: "text-emerald-500" },
-                { label: "Rate parity check", status: "● Monitoring", color: "text-blue-500" },
-                { label: "Pre-arrival alerts", status: "● Scheduled", color: "text-amber-500" },
-              ].map((s) => (
-                <div key={s.label} className="flex items-center justify-between">
-                  <span className="text-xs text-slate-500">{s.label}</span>
-                  <span className={`text-[11px] font-bold ${s.color}`}>{s.status}</span>
-                </div>
-              ))}
-            </div>
-          </div>
         </div>
       </div>
 
-      {/* Footer */}
+      {/* ── ROW 3: RevPAR vs Target + Upcoming Events ──────────────────── */}
+      <div className="grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        {/* RevPAR vs Target */}
+        <div className="lg:col-span-7 bg-white rounded-2xl border border-slate-100 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h3 className="text-sm font-bold text-slate-700">RevPAR vs Target</h3>
+              {kpis && (
+                <p className="text-xs text-slate-400 mt-0.5">
+                  Avg: <span className="font-bold text-slate-600">₹{kpis.avgRevpar.toLocaleString("en-IN")}</span>
+                  {" "}/ Target: <span className="font-bold text-slate-600">₹{kpis.avgRevparTarget.toLocaleString("en-IN")}</span>
+                </p>
+              )}
+            </div>
+            <div className="flex items-center gap-4 text-[11px] text-slate-400 font-medium">
+              <span className="flex items-center gap-1.5">
+                <span className="w-3 h-3 bg-teal-500 rounded-[3px] inline-block" /> Actual
+              </span>
+              <span className="flex items-center gap-1.5">
+                <span className="w-3 h-[2px] bg-red-400 rounded-full inline-block" /> Target
+              </span>
+            </div>
+          </div>
+
+          {loading ? (
+            <ChartSkeleton />
+          ) : revparTrendData.length === 0 ? (
+            <EmptyState message="No RevPAR data for this period" />
+          ) : (
+            <ResponsiveContainer width="100%" height={240}>
+              <ComposedChart data={revparTrendData} margin={{ top: 5, right: 5, left: -20, bottom: 0 }}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f1f5f9" />
+                <XAxis dataKey="date" tickLine={false} axisLine={false} tick={{ fontSize: 11, fill: "#94a3b8", fontWeight: 500 }} />
+                <YAxis hide />
+                <Tooltip
+                  contentStyle={tooltipStyle}
+                  formatter={(value: number, name: string) => [`₹${Math.round(value).toLocaleString("en-IN")}`, name]}
+                />
+                <Bar dataKey="Actual" fill="#14b8a6" radius={[4, 4, 0, 0]} barSize={20} />
+                <Line type="monotone" dataKey="Target" stroke="#f87171" strokeWidth={2} strokeDasharray="6 3" dot={false} />
+              </ComposedChart>
+            </ResponsiveContainer>
+          )}
+        </div>
+
+        {/* Upcoming Events */}
+        <div className="lg:col-span-5 bg-white rounded-2xl border border-slate-100 p-5">
+          <div className="flex items-center justify-between mb-4">
+            <h3 className="text-sm font-bold text-slate-700">Local Events</h3>
+            <span className="text-[11px] text-slate-400 font-medium">
+              {loading ? "…" : `${events.length} events`}
+            </span>
+          </div>
+
+          {loading ? (
+            <ChartSkeleton height={200} />
+          ) : events.length === 0 ? (
+            <div className="flex flex-col items-center justify-center py-10 text-center">
+              <div className="w-10 h-10 rounded-xl bg-slate-50 flex items-center justify-center mb-2">
+                <MapPin className="w-4 h-4 text-slate-300" />
+              </div>
+              <p className="text-sm text-slate-400 font-medium">No events in this period</p>
+            </div>
+          ) : (
+            <div className="space-y-2.5 max-h-[260px] overflow-y-auto pr-1">
+              {events.map((evt) => {
+                const typeClass = EVENT_TYPE_COLORS[evt.event_type?.toLowerCase()] || "bg-slate-50 text-slate-600 border-slate-100";
+                return (
+                  <div
+                    key={evt.id}
+                    className="flex items-center justify-between p-3 rounded-xl border border-slate-100 hover:border-slate-200 hover:shadow-sm transition-all"
+                  >
+                    <div className="flex items-center gap-3 min-w-0">
+                      <div className="w-8 h-8 rounded-lg bg-slate-50 flex items-center justify-center shrink-0">
+                        <MapPin className="w-3.5 h-3.5 text-slate-400" />
+                      </div>
+                      <div className="min-w-0">
+                        <p className="text-xs font-bold text-slate-700 truncate">{evt.event_name}</p>
+                        <p className="text-[10px] text-slate-400 mt-0.5">
+                          {fmtShortDate(evt.date)} • {evt.city}
+                        </p>
+                      </div>
+                    </div>
+                    <span className={`text-[10px] font-bold uppercase tracking-wider px-2 py-1 rounded-md border shrink-0 ${typeClass}`}>
+                      {evt.event_type || "Event"}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* ── Footer ──────────────────────────────────────────────────────── */}
       <div className="mt-10 pt-6 border-t border-slate-100 text-center text-[11px] text-slate-300">
         © 2026 Fortiv Solutions. All rights reserved.
       </div>
